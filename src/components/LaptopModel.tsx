@@ -42,13 +42,14 @@ export default function LaptopModel({
     backCenterPos,
     frontCenterPos,
   } = useMemo(() => {
-    // 1. Locate lid node
-    let lidNode: THREE.Object3D | null = null;
+    // 1. Locate lid node (checking both raw name and sanitized name)
+    const sanitizedLidName = THREE.PropertyBinding.sanitizeNodeName(LID_NODE_NAME);
+    const lidNode =
+      scene.getObjectByName(LID_NODE_NAME) ||
+      scene.getObjectByName(sanitizedLidName);
+
+    // Enable shadows on meshes
     scene.traverse((child) => {
-      if (child.name === LID_NODE_NAME) {
-        lidNode = child;
-      }
-      // Enable shadow reception/casting where applicable
       if ((child as THREE.Mesh).isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
@@ -73,15 +74,16 @@ export default function LaptopModel({
       };
     }
 
-    const lidMesh = lidNode as THREE.Mesh;
-    if (lidMesh.geometry && !lidMesh.geometry.boundingBox) {
-      lidMesh.geometry.computeBoundingBox();
-    }
-
-    const bbox = lidMesh.geometry?.boundingBox || new THREE.Box3(
-      new THREE.Vector3(-2.5633, -0.0741, -1.9832),
-      new THREE.Vector3(0, 0, 1.9832)
-    );
+    const bbox = new THREE.Box3();
+    lidNode.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh && (child as THREE.Mesh).geometry) {
+        const geom = (child as THREE.Mesh).geometry;
+        geom.computeBoundingBox();
+        if (geom.boundingBox) {
+          bbox.union(geom.boundingBox);
+        }
+      }
+    });
 
     const minZ = bbox.min.z;
     const maxZ = bbox.max.z;
@@ -95,9 +97,9 @@ export default function LaptopModel({
     // Radius is ~18% of lid width (diameter = 0.18 * lidWidth)
     const discRadius = (lidWidth * 0.18) / 2;
 
-    const lidPosition = lidMesh.position.clone();
-    const lidQuaternion = lidMesh.quaternion.clone();
-    const lidScale = lidMesh.scale.clone();
+    const lidPosition = lidNode.position.clone();
+    const lidQuaternion = lidNode.quaternion.clone();
+    const lidScale = lidNode.scale.clone();
 
     // Base quaternion for sticker disc:
     // Right = (0, 0, 1), Up = (-1, 0, 0) (towards top edge), Normal = (0, -1, 0) (outer back panel)

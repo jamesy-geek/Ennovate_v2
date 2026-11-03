@@ -138,6 +138,9 @@ export default function TourCanvas() {
     ScrollTrigger.getAll().forEach((t) => t.kill());
 
     const ctx = gsap.context(() => {
+      const stickerWindows: Array<{ index: number; start: number; end: number }> = [];
+      let curTime = 0;
+
       const tl = gsap.timeline({
         scrollTrigger: {
           trigger: containerRef.current,
@@ -146,34 +149,32 @@ export default function TourCanvas() {
           scrub: 1, // Smooth scrubbed easing
           onUpdate: (self) => {
             setScrollProgress(self.progress);
+            const time = tl.time();
+            const active = stickerWindows.find(
+              (w) => time >= w.start && time <= w.end
+            );
+            setActiveStickerIdx(active ? active.index : -1);
           },
         },
       });
 
       if (prefersReducedMotion) {
-        // Reduced motion: Fade highlight without moving camera
+        // Reduced motion: highlight each sticker sequentially without camera move
+        const durationPerSticker = 1.5;
         data.targets.forEach((tgt, idx) => {
-          tl.to(
-            {},
-            {
-              duration: 1,
-              onStart: () => setActiveStickerIdx(idx),
-              onReverseComplete: () => setActiveStickerIdx(idx - 1),
-            }
-          );
+          const start = curTime;
+          const end = curTime + durationPerSticker;
+          stickerWindows.push({ index: idx, start, end });
+          tl.to({}, { duration: durationPerSticker });
+          curTime = end;
         });
-        tl.to(
-          {},
-          {
-            duration: 0.5,
-            onStart: () => setActiveStickerIdx(-1),
-          }
-        );
+        tl.to({}, { duration: 0.5 });
         return;
       }
 
       // Step 1: Start front view hold
       tl.to({}, { duration: 0.4 });
+      curTime += 0.4;
 
       // Step 2: Smoothly turn the laptop to show the back of the lid
       tl.to(animState.current, {
@@ -186,18 +187,28 @@ export default function TourCanvas() {
         targetZ: backTarget.z,
         duration: 2.2,
         ease: 'power2.inOut',
-        onStart: () => setActiveStickerIdx(-1),
       });
+      curTime += 2.2;
 
       // Brief pause at full back view
       tl.to({}, { duration: 0.5 });
+      curTime += 0.5;
 
       // Step 3: Glide to sticker 1, hold, then 2, 3, 4 in order
       data.targets.forEach((target, i) => {
-        // Camera position for this sticker = worldPos + worldNormal * framingDistance
         const stickerCam = target.worldPos
           .clone()
           .add(target.worldNormal.clone().multiplyScalar(stickerDist));
+
+        const glideDuration = 1.6;
+        const holdDuration = 1.2;
+
+        // Window where this sticker is actively in focus
+        stickerWindows.push({
+          index: i,
+          start: curTime + 0.6,
+          end: curTime + glideDuration + holdDuration + 0.2,
+        });
 
         // Glide camera to sticker
         tl.to(animState.current, {
@@ -207,20 +218,14 @@ export default function TourCanvas() {
           targetX: target.worldPos.x,
           targetY: target.worldPos.y,
           targetZ: target.worldPos.z,
-          duration: 1.6,
+          duration: glideDuration,
           ease: 'power2.inOut',
-          onStart: () => setActiveStickerIdx(i),
-          onReverseComplete: () => setActiveStickerIdx(i - 1),
         });
+        curTime += glideDuration;
 
         // Hold on sticker
-        tl.to(
-          {},
-          {
-            duration: 1.2,
-            onStart: () => setActiveStickerIdx(i),
-          }
-        );
+        tl.to({}, { duration: holdDuration });
+        curTime += holdDuration;
       });
 
       // Step 4: Ease back to full back view
@@ -233,8 +238,8 @@ export default function TourCanvas() {
         targetZ: backTarget.z,
         duration: 2.2,
         ease: 'power2.inOut',
-        onStart: () => setActiveStickerIdx(-1),
       });
+      curTime += 2.2;
 
       // End hold
       tl.to({}, { duration: 0.6 });
