@@ -16,7 +16,9 @@
 - Dark scene configuration with single warm spotlight, faint ambient, and dark flat ground plane
 - Dynamic sticker positioning system (`src/config/stickers.ts`) computed from lid bounding box
 - Disc placeholders (with numbers) and orange logo ring on lid outer back panel
-- GSAP ScrollTrigger-driven 3D camera tour (front view -> rotation -> sticker sequence -> back view)
+- Scroll-driven 3D camera tour (front view -> turn -> sticker sequence -> back view). Camera rig lives in `src/lib/cameraRig.ts`: ONE clock drives camera position, look-at target and laptop turn together, so the camera always follows the laptop. The laptop turns around the centre of its lid (not the world origin). ScrollTrigger only reports a progress number; the 3D scene reads it every frame with damping. No timeline rebuilds on resize (phone address-bar safe), no React re-render per scroll tick.
+- Fix: spotlight now exists on first render (was missing until first scroll)
 - Responsive framing (mobile, tablet, desktop, ultrawide) with DPR caps (1.5 mobile, 2 desktop)
 - WebGL failure fallback showing styled section list
 - Prefers-reduced-motion accessibility support
+

@@ -53,3 +53,4 @@ export const STICKERS: StickerConfig[] = [
     tiltDeg: 9,
   },
 ];
+

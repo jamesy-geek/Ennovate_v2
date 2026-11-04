@@ -5,22 +5,13 @@ import * as THREE from 'three';
 import { useGLTF } from '@react-three/drei';
 import { STICKERS, LOGO_CONFIG, LID_NODE_NAME, StickerConfig } from '@/config/stickers';
 import StickerDisc from './StickerDisc';
+import type { RigModelData, StickerTourTarget } from '@/lib/cameraRig';
 
-export interface StickerTourTarget {
-  id: string;
-  label: string;
-  worldPos: THREE.Vector3;
-  worldNormal: THREE.Vector3;
-}
+export type { StickerTourTarget };
 
 interface LaptopModelProps {
   activeStickerIndex?: number;
-  onModelReady?: (data: {
-    targets: StickerTourTarget[];
-    lidWidth: number;
-    backCenterPos: THREE.Vector3;
-    frontCenterPos: THREE.Vector3;
-  }) => void;
+  onModelReady?: (data: RigModelData) => void;
 }
 
 export default function LaptopModel({
@@ -41,6 +32,7 @@ export default function LaptopModel({
     tourTargets,
     backCenterPos,
     frontCenterPos,
+    pivot,
   } = useMemo(() => {
     // 1. Locate lid node (checking both raw name and sanitized name)
     const sanitizedLidName = THREE.PropertyBinding.sanitizeNodeName(LID_NODE_NAME);
@@ -69,8 +61,9 @@ export default function LaptopModel({
         stickerPlacements: [],
         logoPlacement: null,
         tourTargets: [],
-        backCenterPos: new THREE.Vector3(1.5, 1.2, 0),
-        frontCenterPos: new THREE.Vector3(0, 0.9, 0),
+        backCenterPos: new THREE.Vector3(-1.5, 1.34, 0),
+        frontCenterPos: new THREE.Vector3(-1.44, 1.35, 0),
+        pivot: new THREE.Vector3(-1.47, 0, 0),
       };
     }
 
@@ -147,41 +140,39 @@ export default function LaptopModel({
       outerRadius: discRadius * 0.85,
     };
 
-    // Calculate tour targets in world coordinates when laptop is turned (rotation.y = PI)
-    const rotPI = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+    // Tour targets in LAPTOP space (laptop un-turned). The camera rig applies the
+    // turn around `pivot`, so nothing here depends on how the laptop is rotated.
     const lidMatrix = new THREE.Matrix4().compose(lidPosition, lidQuaternion, lidScale);
-    const groupMatrix = new THREE.Matrix4().makeRotationY(Math.PI);
-    const fullWorldMatrix = groupMatrix.clone().multiply(lidMatrix);
+    const outerNormal = new THREE.Vector3(0, -1, 0)
+      .applyQuaternion(lidQuaternion)
+      .normalize();
 
-    const tourTargets: StickerTourTarget[] = placements.map((p) => {
-      const worldPos = p.localPos.clone().applyMatrix4(fullWorldMatrix);
-      const localNormal = new THREE.Vector3(0, -1, 0);
-      const worldNormal = localNormal
-        .clone()
-        .applyQuaternion(lidQuaternion)
-        .applyQuaternion(rotPI)
-        .normalize();
+    const tourTargets: StickerTourTarget[] = placements.map((p) => ({
+      id: p.sticker.id,
+      label: p.sticker.label,
+      pos: p.localPos.clone().applyMatrix4(lidMatrix),
+      normal: outerNormal.clone(),
+    }));
 
-      return {
-        id: p.sticker.id,
-        label: p.sticker.label,
-        worldPos,
-        worldNormal,
-      };
-    });
-
-    // Center of the back lid when turned
+    // Centre of the outer back panel
     const centerLocal = new THREE.Vector3(
       maxX - 0.5 * lidHeight,
       minY - 0.005,
       minZ + 0.5 * lidWidth
     );
-    const backCenterPos = centerLocal.clone().applyMatrix4(fullWorldMatrix);
+    const backCenterPos = centerLocal.clone().applyMatrix4(lidMatrix);
 
-    // Front center position (screen facing camera at rotY = 0)
-    const frontLidMatrix = lidMatrix.clone();
+    // Centre of the screen face
     const screenCenterLocal = new THREE.Vector3(maxX - 0.5 * lidHeight, 0, minZ + 0.5 * lidWidth);
-    const frontCenterPos = screenCenterLocal.clone().applyMatrix4(frontLidMatrix);
+    const frontCenterPos = screenCenterLocal.clone().applyMatrix4(lidMatrix);
+
+    // The laptop turns around a vertical axis through the middle of the lid,
+    // so the lid stays in the middle of the frame for the whole turn.
+    const pivot = new THREE.Vector3(
+      (backCenterPos.x + frontCenterPos.x) / 2,
+      0,
+      (backCenterPos.z + frontCenterPos.z) / 2
+    );
 
     return {
       lidTransform: {
@@ -196,6 +187,7 @@ export default function LaptopModel({
       tourTargets,
       backCenterPos,
       frontCenterPos,
+      pivot,
     };
   }, [scene]);
 
@@ -208,9 +200,10 @@ export default function LaptopModel({
         lidWidth: lidDimensions.maxZ - lidDimensions.minZ,
         backCenterPos,
         frontCenterPos,
+        pivot,
       });
     }
-  }, [tourTargets, onModelReady, lidDimensions, backCenterPos, frontCenterPos]);
+  }, [tourTargets, onModelReady, lidDimensions, backCenterPos, frontCenterPos, pivot]);
 
   return (
     <>
