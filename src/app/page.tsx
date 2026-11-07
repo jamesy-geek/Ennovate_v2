@@ -7,7 +7,7 @@ const TourCanvas = dynamic(() => import('@/components/TourCanvas'), {
   loading: () => (
     <div
       style={{
-        width: '100vw',
+        width: '100%',
         height: '100vh',
         backgroundColor: '#08080a',
         display: 'flex',
@@ -15,6 +15,8 @@ const TourCanvas = dynamic(() => import('@/components/TourCanvas'), {
         justifyContent: 'center',
         color: '#6b7280',
         fontFamily: 'sans-serif',
+        position: 'fixed',
+        zIndex: 100,
       }}
     >
       Loading 3D Experience...

@@ -8,9 +8,13 @@ import * as THREE from 'three';
  * Because they all come from the same clock they can never drift apart,
  * which is what "the camera follows the laptop at all times" means in code.
  *
- * All model data is in LAPTOP SPACE (the laptop un-turned). The rig turns the
- * laptop around a vertical axis through the CENTRE OF THE LID (`pivot`), so the
- * lid stays put in the frame while the base swings around it.
+ * All model data is in LAPTOP SPACE (the laptop un-turned).
+ *
+ * Separation of concerns (this is the contract):
+ *   - The LAPTOP never moves. Its only animated property is yaw, a turn IN PLACE
+ *     around a vertical axis through its own centre (`pivot`).
+ *   - The CAMERA does everything else: framing, zooming, gliding to stickers.
+ *   - Scroll is the clock. It only supplies a number from 0 to 1.
  */
 
 export interface StickerTourTarget {
@@ -29,7 +33,9 @@ export interface RigModelData {
   backCenterPos: THREE.Vector3;
   /** Centre of the screen face (laptop space) */
   frontCenterPos: THREE.Vector3;
-  /** Vertical axis the laptop turns around (y is ignored) */
+  /** Centre of the whole laptop (bounding box centre), laptop space */
+  bodyCenter: THREE.Vector3;
+  /** Vertical axis the laptop turns around in place (y is ignored) */
   pivot: THREE.Vector3;
 }
 
@@ -56,6 +62,12 @@ const GLIDE = 1.6;
 const HOLD = 1.2;
 const RETURN = 2.2;
 const END_HOLD = 0.6;
+/** While the laptop spins, its wide base sweeps toward the camera. The camera backs
+ *  off by this fraction of the framing distance at mid-flip, then returns, so the
+ *  whole laptop stays in frame. Start and end framing are unchanged. */
+const FLIP_PULLBACK = 0.2;
+/** Portrait screens are narrow, so the laptop's width needs more breathing room. */
+const FLIP_PULLBACK_PORTRAIT = 0.32;
 
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
@@ -94,6 +106,8 @@ interface Segment {
   sticker: number;
   /** Only report the sticker as active after this fraction of the segment */
   activeFrom: number;
+  /** Extra camera distance at the middle of this segment (0 = none) */
+  pullBack: number;
 }
 
 const clonePose = (p: Pose): Pose => ({
@@ -117,14 +131,15 @@ export function buildRig(
   const turnedDir = (v: THREE.Vector3) =>
     v.clone().applyAxisAngle(Y_AXIS, Math.PI).normalize();
 
-  // 1. Front pose: laptop un-turned, camera on the screen side.
+  // 1. Front pose: laptop un-turned, camera on the screen side, aimed at the
+  //    laptop's own centre (the very axis it will spin around).
   const front: Pose = {
     pos: new THREE.Vector3(
-      data.frontCenterPos.x + fullDist + 1.4,
+      data.bodyCenter.x + fullDist + 1.4,
       1.25,
-      data.frontCenterPos.z
+      data.bodyCenter.z
     ),
-    target: data.frontCenterPos.clone(),
+    target: data.bodyCenter.clone(),
     yaw: 0,
   };
 
@@ -157,14 +172,15 @@ export function buildRig(
     a: Pose,
     b: Pose,
     sticker = -1,
-    activeFrom = 0
+    activeFrom = 0,
+    pullBack = 0
   ) => {
-    segments.push({ t0: t, t1: t + dur, a, b, sticker, activeFrom });
+    segments.push({ t0: t, t1: t + dur, a, b, sticker, activeFrom, pullBack });
     t += dur;
   };
 
   add(FRONT_HOLD, front, front);
-  add(TURN, front, back); // laptop turns, camera + target glide together
+  add(TURN, front, back, -1, 0, fullDist * (aspect < 1 ? FLIP_PULLBACK_PORTRAIT : FLIP_PULLBACK)); // laptop spins in place; camera eases back and returns
   add(BACK_PAUSE, back, back);
 
   let prev = back;
@@ -197,6 +213,15 @@ export function buildRig(
 
       out.pos.lerpVectors(seg.a.pos, seg.b.pos, k);
       out.target.lerpVectors(seg.a.target, seg.b.target, k);
+      if (seg.pullBack > 0) {
+        // back the camera straight away from what it is looking at (horizontally)
+        const dx = out.pos.x - out.target.x;
+        const dz = out.pos.z - out.target.z;
+        const len = Math.hypot(dx, dz) || 1;
+        const push = seg.pullBack * Math.sin(Math.PI * k);
+        out.pos.x += (dx / len) * push;
+        out.pos.z += (dz / len) * push;
+      }
       out.yaw = seg.a.yaw + (seg.b.yaw - seg.a.yaw) * k;
       out.activeIndex =
         seg.sticker >= 0 && raw >= seg.activeFrom ? seg.sticker : -1;

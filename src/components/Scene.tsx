@@ -119,8 +119,9 @@ export default function Scene({
         <meshStandardMaterial color="#0b0c10" roughness={0.9} metalness={0.08} />
       </mesh>
 
-      {/* Turn group sits ON the pivot (centre of the lid) and spins around it.
-          The inner group shifts the laptop back so it stays where it was. */}
+      {/* The laptop's position is fixed. This group only YAWS it, in place, around
+          a vertical axis through its own centre (the pivot). The inner group
+          shifts it back so at yaw 0 it sits exactly where the model was authored. */}
       <group ref={turnGroupRef} position={pivot}>
         <group position={[-pivot.x, -pivot.y, -pivot.z]}>
           <LaptopModel

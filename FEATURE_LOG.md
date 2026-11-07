@@ -18,6 +18,8 @@
 - Disc placeholders (with numbers) and orange logo ring on lid outer back panel
 - Scroll-driven 3D camera tour (front view -> turn -> sticker sequence -> back view). Camera rig lives in `src/lib/cameraRig.ts`: ONE clock drives camera position, look-at target and laptop turn together, so the camera always follows the laptop. The laptop turns around the centre of its lid (not the world origin). ScrollTrigger only reports a progress number; the 3D scene reads it every frame with damping. No timeline rebuilds on resize (phone address-bar safe), no React re-render per scroll tick.
 - Fix: spotlight now exists on first render (was missing until first scroll)
+- Fix: 3D stage is `position: fixed` (scroll only supplies distance), so it can't scroll away. Previously overflow-x:hidden on html+body broke `position: sticky`. No overflow hacks are used anywhere.
+- Contract: the laptop NEVER moves; it only yaws in place around its own centre. All framing/zoom is done by the camera. Scroll is just the 0..1 timeline clock.
 - Responsive framing (mobile, tablet, desktop, ultrawide) with DPR caps (1.5 mobile, 2 desktop)
 - WebGL failure fallback showing styled section list
 - Prefers-reduced-motion accessibility support
